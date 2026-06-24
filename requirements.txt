@@ -1,0 +1,16 @@
+# Core AI (Installed via wheels in Makefile for Jetson)
+# onnxruntime-gpu
+# torch
+# torchvision
+
+# System & Web
+opencv-python
+fastapi
+uvicorn
+numpy
+scipy
+psutil
+jetson-stats
+websockets
+orjson
+pycuda

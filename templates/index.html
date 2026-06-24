@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #000000;
+            --sidebar-bg: rgba(10, 10, 10, 0.85);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-main: #ffffff;
+            --text-muted: #707070;
+            
+            /* Status / Indicator Colors only */
+            --indicator-active: #00ff7f;
+            --indicator-inactive: #888888;
+            --indicator-warning: #ffaa00;
+            --indicator-error: #ff3b30;
+            --indicator-info: #00bfff;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+        }
+
+        /* Full Screen Camera Viewport */
+        .viewport-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+            /* Reserve space on the right so feed isn't entirely blocked by sidebar */
+            padding-right: 360px; 
+        }
+
+        body.sidebar-closed .viewport-container {
+            padding-right: 0;
+        }
+
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+        }
+
+        /* Fixed Right Sidebar */
+        .sidebar {
+            position: fixed;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 360px;
+            background: var(--sidebar-bg);
+            border-left: 1px solid var(--border-color);
+            backdrop-filter: blur(20px);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            padding: 2rem 1.5rem;
+            justify-content: space-between;
+            overflow-y: auto;
+        }
+
+        body.sidebar-closed .sidebar {
+            display: none;
+        }
+
+        .sidebar-header {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 2rem;
+        }
+
+        .header-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        /* Toggle Button Styles */
+        .toggle-sidebar-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border-color);
+        }
+
+        .sidebar .close-btn {
+            width: auto;
+            padding: 4px 8px;
+            font-size: 0.7rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .app-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .conn-status {
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            letter-spacing: 0.5px;
+            color: var(--indicator-inactive);
+        }
+
+        .conn-status.online {
+            color: var(--indicator-active);
+        }
+
+        .conn-status.offline {
+            color: var(--indicator-error);
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: currentColor;
+        }
+
+        /* Section Styling */
+        .section {
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        /* Metrics Row */
+        .metrics-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .metric-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .metric-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+
+        /* Telemetry Indicators (Compact design) */
+        .telemetry-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            margin-bottom: 1rem;
+        }
+
+        .telemetry-label-group {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+        }
+
+        .telemetry-label {
+            color: var(--text-muted);
+        }
+
+        .telemetry-value {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .mini-progress {
+            width: 100%;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .mini-progress-fill {
+            height: 100%;
+            background: #ffffff; /* Monochrome */
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        /* Active highlight for indicator values */
+        .indicator-highlight {
+            font-weight: 700;
+        }
+
+        /* Toggle Button - Plain Monochrome */
+        button {
+            width: 100%;
+            background: transparent;
+            border: 1px solid #ffffff;
+            color: #ffffff;
+            padding: 0.85rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        button:hover {
+            background: #ffffff;
+            color: #000000;
+        }
+
+        button.disabled {
+            border-color: var(--text-muted);
+            color: var(--text-muted);
+        }
+
+        button.disabled:hover {
+            background: var(--text-muted);
+            color: #000000;
+        }
+
+        .footer {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: auto;
+            padding-top: 2rem;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Full Screen Viewport -->
+    <div class="viewport-container">
+        <canvas id="viewCanvas" width="1280" height="720"></canvas>
+    </div>
+
+    <button class="toggle-sidebar-btn" onclick="toggleSidebar()" title="Toggle Sidebar">☰</button>
+
+    <!-- Fixed Right Sidebar -->
+    <div class="sidebar">
+        <div>
+            <!-- Header Info -->
+            <div class="sidebar-header">
+                <div class="header-content">
+                    <div class="app-title">Tracker Pipeline</div>
+                    <div class="conn-status offline" id="connStatus">
+                        <div class="status-dot"></div>
+                        <span id="connStatusText">OFFLINE</span>
+                    </div>
+                </div>
+                <button class="close-btn" onclick="toggleSidebar()">CLOSE</button>
+            </div>
+
+            <!-- Controls -->
+            <div class="section">
+                <div class="section-title">Control</div>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button id="togglePipelineBtn" class="__PIPELINE_BTN_CLASS__" onclick="togglePipeline()">Detection: __PIPELINE_STATUS__</button>
+                    <button id="toggleBtn" class="__BTN_CLASS__" onclick="toggleTracking()">Tracking: __STATUS__</button>
+                </div>
+            </div>
+
+            <!-- Engine Metrics -->
+            <div class="section">
+                <div class="section-title">Diagnostics</div>
+                <div class="metrics-list">
+                    <div class="metric-row">
+                        <span class="metric-label">Pipeline Status</span>
+                        <span class="metric-value indicator-highlight" id="pipelineState" style="color: var(--indicator-inactive)">BOOTING</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Camera Rate</span>
+                        <span class="metric-value"><span id="camFps">0.0</span> FPS</span>
+                    </div>
+                    <div class="metric-row" style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; margin-top: 0.5rem;">
+                        <span class="metric-label" style="font-weight: 600;">Perception Rate</span>
+                        <span class="metric-value" style="font-weight: 600;"><span id="perceptionFps">0.0</span> Hz</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label" style="font-weight: 600;">Perception Step</span>
+                        <span class="metric-value" id="perceptionTimeVal" style="font-weight: 600;">0.0 ms</span>
+                    </div>
+                    <div class="metric-row" style="padding-left: 1rem; font-size: 0.85rem; opacity: 0.8;">
+                        <span class="metric-label">└─ Detector (YOLO)</span>
+                        <span class="metric-value" id="detTimeVal">0.0 ms</span>
+                    </div>
+                    <div class="metric-row" style="padding-left: 1rem; font-size: 0.85rem; opacity: 0.8;">
+                        <span class="metric-label">└─ ReID (OSNet)</span>
+                        <span class="metric-value" id="reidTimeVal">0.0 ms</span>
+                    </div>
+                    <div class="metric-row" style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; margin-top: 0.5rem;">
+                        <span class="metric-label">Tracker (Update)</span>
+                        <span class="metric-value"><span id="trackUpdateFps">0.0</span> Hz (<span id="trackUpdateTimeVal">0.0 ms</span>)</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Tracker (Predict)</span>
+                        <span class="metric-value"><span id="trackPredictFps">0.0</span> Hz (<span id="trackPredictTimeVal">0.0 ms</span>)</span>
+                    </div>
+                    <div class="metric-row" style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; margin-top: 0.5rem;">
+                        <span class="metric-label">Latency End-to-End</span>
+                        <span class="metric-value" id="latencyTimeVal">0.0 ms</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Metrics -->
+            <div class="section">
+                <div class="section-title">System</div>
+                
+                <div class="telemetry-row">
+                    <div class="telemetry-label-group">
+                        <span class="telemetry-label">CPU Load</span>
+                        <span class="telemetry-value" id="cpuVal">0%</span>
+                    </div>
+                    <div class="mini-progress">
+                        <div class="mini-progress-fill" id="cpuBar"></div>
+                    </div>
+                </div>
+
+                <div class="telemetry-row">
+                    <div class="telemetry-label-group">
+                        <span class="telemetry-label">GPU Load</span>
+                        <span class="telemetry-value" id="gpuVal">0%</span>
+                    </div>
+                    <div class="mini-progress">
+                        <div class="mini-progress-fill" id="gpuBar"></div>
+                    </div>
+                </div>
+
+                <div class="telemetry-row">
+                    <div class="telemetry-label-group">
+                        <span class="telemetry-label">RAM Usage</span>
+                        <span class="telemetry-value" id="ramVal">0.0 GB</span>
+                    </div>
+                    <div class="mini-progress">
+                        <div class="mini-progress-fill" id="ramBar"></div>
+                    </div>
+                </div>
+
+                <div class="telemetry-row">
+                    <div class="telemetry-label-group">
+                        <span class="telemetry-label">Temperature</span>
+                        <span class="telemetry-value" id="tempVal">0 °C</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('viewCanvas');
+        const ctx = canvas.getContext('2d');
+        let ws;
+
+        function connectWS() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                const connStatus = document.getElementById('connStatus');
+                connStatus.className = 'conn-status online';
+                document.getElementById('connStatusText').innerText = 'ONLINE';
+            };
+            
+            ws.onclose = () => {
+                const connStatus = document.getElementById('connStatus');
+                connStatus.className = 'conn-status offline';
+                document.getElementById('connStatusText').innerText = 'OFFLINE';
+                setTimeout(connectWS, 2000);
+            };
+            
+            ws.onerror = () => {
+                ws.close();
+            };
+            
+            ws.onmessage = (event) => {
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch (e) {
+                    console.error("Error parsing websocket JSON:", e);
+                    return;
+                }
+                
+                // Set constant canvas dimensions matching original image size (1280x720)
+                if (canvas.width !== 1280 || canvas.height !== 720) {
+                    canvas.width = 1280;
+                    canvas.height = 720;
+                }
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw a nice dark background
+                ctx.fillStyle = '#050505';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw a subtle grid
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                ctx.lineWidth = 1;
+                const gridSize = 40;
+                for (let x = 0; x < canvas.width; x += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, canvas.height);
+                    ctx.stroke();
+                }
+                for (let y = 0; y < canvas.height; y += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.stroke();
+                }
+                
+                // 1. Render Tracker Visualizations (comet tails & ellipses - using clean monochrome outlines)
+                if (data.visualizations) {
+                    data.visualizations.forEach(vis => {
+                        ctx.beginPath();
+                        if (vis.type === 'polyline' && vis.points.length > 1) {
+                            ctx.moveTo(Math.round(vis.points[0][0]), Math.round(vis.points[0][1]));
+                            for (let i = 1; i < vis.points.length; i++) {
+                                ctx.lineTo(Math.round(vis.points[i][0]), Math.round(vis.points[i][1]));
+                            }
+                            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                            ctx.lineWidth = vis.thickness || 1;
+                            ctx.stroke();
+                        } else if (vis.type === 'ellipse') {
+                            ctx.ellipse(
+                                Math.round(vis.center[0]), Math.round(vis.center[1]), 
+                                Math.round(vis.axes[0]), Math.round(vis.axes[1]), 
+                                vis.angle * Math.PI / 180, 0, 2 * Math.PI
+                            );
+                            ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+                            ctx.lineWidth = 1;
+                            ctx.stroke();
+                        }
+                    });
+                }
+                
+                // 2. Render Bounding Boxes (Monochrome white boxes with indication highlight)
+                if (data.detections) {
+                    data.detections.forEach(det => {
+                        const x = Math.round(det.bbox[0]);
+                        const y = Math.round(det.bbox[1]);
+                        const w = Math.round(det.bbox[2]);
+                        const h = Math.round(det.bbox[3]);
+                        
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(x, y, w, h);
+                        
+                        // Badge label (3x larger ID)
+                        const label = `ID ${det.id}`;
+                        ctx.font = 'bold 42px "Inter", sans-serif';
+                        const textPadding = 24;
+                        const textWidth = ctx.measureText(label).width;
+                        const badgeH = 66;
+                        const badgeW = textWidth + textPadding * 2;
+                        const badgeY = Math.max(0, y - badgeH - 3);
+                        
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(x, badgeY, badgeW, badgeH);
+                        
+                        ctx.fillStyle = '#000000';
+                        ctx.fillText(label, x + textPadding, badgeY + 48);
+                    });
+                }
+                
+                // 4. Update Sidebar Telemetry Info
+                if (data.metrics) {
+                    const m = data.metrics;
+                    
+                    // Pipeline State with indicator color
+                    const pipelineState = document.getElementById('pipelineState');
+                    pipelineState.innerText = m.status;
+                    if (m.status.includes('ACTIVE')) {
+                        pipelineState.style.color = 'var(--indicator-active)';
+                    } else if (m.status.includes('ERROR')) {
+                        pipelineState.style.color = 'var(--indicator-error)';
+                    } else {
+                        pipelineState.style.color = 'var(--indicator-warning)';
+                    }
+                    
+                    // Rates & Latency values
+                    document.getElementById('camFps').innerText = m.cam_fps.toFixed(1);
+                    document.getElementById('perceptionFps').innerText = m.perception_fps.toFixed(1);
+                    document.getElementById('perceptionTimeVal').innerText = `${m.perception_time_ms.toFixed(1)} ms`;
+                    document.getElementById('detTimeVal').innerText = `${m.yolo_time_ms.toFixed(1)} ms`;
+                    document.getElementById('reidTimeVal').innerText = `${m.reid_time_ms.toFixed(1)} ms`;
+                    
+                    // Tracker Updates
+                    document.getElementById('trackUpdateFps').innerText = m.track_update_fps.toFixed(1);
+                    document.getElementById('trackUpdateTimeVal').innerText = `${m.track_update_ms.toFixed(1)} ms`;
+                    
+                    // Tracker Predictions
+                    document.getElementById('trackPredictFps').innerText = m.track_predict_fps.toFixed(1);
+                    document.getElementById('trackPredictTimeVal').innerText = `${m.track_predict_ms.toFixed(1)} ms`;
+                    
+                    document.getElementById('latencyTimeVal').innerText = `${m.latency_time_ms.toFixed(1)} ms`;
+                    
+                    // System load bars
+                    document.getElementById('cpuVal').innerText = `${m.cpu.toFixed(0)}%`;
+                    document.getElementById('cpuBar').style.width = `${m.cpu}%`;
+                    
+                    document.getElementById('gpuVal').innerText = `${m.gpu.toFixed(0)}%`;
+                    document.getElementById('gpuBar').style.width = `${m.gpu}%`;
+                    
+                    document.getElementById('ramVal').innerText = `${m.ram_used.toFixed(1)} / ${m.ram_total.toFixed(1)} GB`;
+                    document.getElementById('ramBar').style.width = `${(m.ram_used / m.ram_total) * 100}%`;
+                    
+                    document.getElementById('tempVal').innerText = `${m.temp.toFixed(1)} °C`;
+                }
+            };
+        }
+
+        async function toggleTracking() {
+            const btn = document.getElementById('toggleBtn');
+            try {
+                const response = await fetch('/toggle_tracking', { method: 'POST' });
+                const data = await response.json();
+                if (data.enabled) {
+                    btn.innerText = 'Tracking: ON';
+                    btn.classList.remove('disabled');
+                } else {
+                    btn.innerText = 'Tracking: OFF';
+                    btn.classList.add('disabled');
+                }
+            } catch (e) {
+                console.error('Failed to toggle tracking', e);
+            }
+        }
+
+        async function togglePipeline() {
+            const btn = document.getElementById('togglePipelineBtn');
+            try {
+                const response = await fetch('/toggle_pipeline', { method: 'POST' });
+                const data = await response.json();
+                if (data.enabled) {
+                    btn.innerText = 'Detection: ON';
+                    btn.classList.remove('disabled');
+                } else {
+                    btn.innerText = 'Detection: OFF';
+                    btn.classList.add('disabled');
+                }
+            } catch (e) {
+                console.error('Failed to toggle pipeline', e);
+            }
+        }
+
+        function toggleSidebar() {
+            document.body.classList.toggle('sidebar-closed');
+        }
+
+        connectWS();
+    </script>
+</body>
+</html>
